@@ -20,7 +20,7 @@
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:880px;margin:0 auto;padding:40px 20px 64px}
+main{max-width:1040px;margin:0 auto;padding:40px 20px 64px}
 h1{font:600 clamp(2rem,5vw,2.9rem)/1.1 "Cormorant",Georgia,serif;margin:0 0 8px}
 .sub{color:var(--muted);margin:0 0 32px;max-width:62ch}
 .control{display:grid;grid-template-columns:1fr auto;gap:12px 20px;align-items:center;padding:24px 0;border-top:1px solid var(--ink);border-bottom:1px solid var(--line)}
@@ -34,16 +34,16 @@ input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--blue)}
 .mode button[aria-pressed=true]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 .mode button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .modenote{color:var(--muted);font-size:.92rem;margin:0 0 24px;max-width:66ch}
-.tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line);background:var(--card)}
-.tier{padding:20px;border-right:1px solid var(--line)}
-.tier:last-child{border-right:0}
-.tier h2{font:600 1rem "Bricolage Grotesque",system-ui,sans-serif;margin:0 0 14px;color:var(--muted)}
-.rate{font:700 2rem/1.1 "Bricolage Grotesque",system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.tier{padding:18px;border:1px solid var(--line);background:var(--card);border-radius:10px}
+.tier.pop{border:2px solid var(--blue)}
+.tier h2 span{display:block;font:400 .85rem 'Hanken Grotesk',sans-serif;color:var(--muted);margin-top:2px}
+.tier h2{font:600 1.05rem "Bricolage Grotesque",system-ui,sans-serif;margin:0 0 14px}
+.rate{font:700 1.6rem/1.1 "Bricolage Grotesque",system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .rate small{font:500 .9rem "Hanken Grotesk",sans-serif;color:var(--muted)}
 .total{margin-top:14px;font-variant-numeric:tabular-nums}
 .total b{font-size:1.25rem}
 .save{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums}
-@media (max-width:640px){.tiers{grid-template-columns:1fr}.tier{border-right:0;border-bottom:1px solid var(--line)}.tier:last-child{border-bottom:0}}
 h3{font:600 1.35rem "Cormorant",Georgia,serif;margin:40px 0 10px}
 .wrap{overflow-x:auto}
 table{border-collapse:collapse;width:100%;min-width:560px;font-variant-numeric:tabular-nums}
@@ -57,7 +57,7 @@ tr.hl td{color:var(--blue);font-weight:600}
 <body>
 <main>
   <h1>Multi-location pricing</h1>
-  <p class="sub">Discounts start at 3 locations. Each extra location knocks the same percentage off the per-location rate, so 100 locations lands at two thirds of list on every tier.</p>
+  <p class="sub">Discounts start at 3 locations. Each extra location knocks the same percentage off the per-location rate, so 100+ locations lands at two thirds of list on every paid plan except the $1 Report.</p>
 
   <div class="control">
     <label for="n">Locations</label>
@@ -73,13 +73,18 @@ tr.hl td{color:var(--blue);font-weight:600}
 
   <div class="tiers" id="tiers"></div>
 
-  <h3>Reference points</h3>
+  <h3>Per-location rate at reference points</h3>
   <div class="wrap"><table id="ref"></table></div>
 
   <div class="formula" id="formula"></div>
 </main>
 <script>
-const TIERS=[3000,1500,500];
+const TIERS=[
+  {name:"Report",list:1,flat:true},
+  {name:"Fixed",list:500},
+  {name:"Trusted",list:1500,pop:true},
+  {name:"Authority",list:3000},
+  {name:"End-to-end",list:4000}];
 const TARGET_N=100, TARGET_RATIO=2/3;             // $3,000 to $2,000 at 100 locations
 const R=Math.pow(TARGET_RATIO,1/(TARGET_N-2));     // per-location multiplier
 const STEP=(1-R)*100;                              // % off per added location
@@ -87,32 +92,33 @@ let mode="volume";
 
 const fmt=v=>"$"+Math.round(v).toLocaleString("en-US");
 const fmt2=v=>"$"+v.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
-const rateAt=(list,k)=>list*Math.pow(R,Math.max(0,Math.min(k,TARGET_N)-2)); // floor at 100
-function total(list,n){
-  if(mode==="volume") return rateAt(list,n)*n;
-  let s=0; for(let k=1;k<=n;k++) s+=rateAt(list,k); return s;
+const rateAtRaw=(list,k)=>list*Math.pow(R,Math.max(0,Math.min(k,TARGET_N)-2)); // floor at 100
+const rateAt=(t,k)=>t.flat?t.list:rateAtRaw(t.list,k);
+function total(t,n){
+  if(t.flat||mode==="volume") return rateAt(t,n)*n;
+  let s=0; for(let k=1;k<=n;k++) s+=rateAt(t,k); return s;
 }
 function render(){
   const n=Math.max(1,Math.min(150,parseInt(document.getElementById("n").value)||1));
-  document.getElementById("tiers").innerHTML=TIERS.map(list=>{
-    const t=total(list,n), eff=t/n, full=list*n;
+  document.getElementById("tiers").innerHTML=TIERS.map(tr=>{
+    const list=tr.list, t=total(tr,n), eff=t/n, full=list*n;
     const pct=full?((1-t/full)*100):0;
-    return `<div class="tier"><h2>${fmt(list)} tier</h2>
-      <div class="rate">${fmt2(mode==="volume"?rateAt(list,n):eff)} <small>${mode==="volume"?"per location":"avg per location"}</small></div>
+    return `<div class="tier${tr.pop?" pop":""}"><h2>${tr.name} <span>${fmt(list)}/mo list</span></h2>
+      <div class="rate">${fmt2(mode==="volume"||tr.flat?rateAt(tr,n):eff)} <small>${tr.flat?"per location, always":mode==="volume"?"per location":"avg per location"}</small></div>
       <div class="total"><b>${fmt(t)}</b>/mo total</div>
-      <div class="save">${pct.toFixed(1)}% under list (${fmt(full-t)}/mo)</div></div>`;
+      <div class="save">${tr.flat?"No volume discount":pct.toFixed(1)+"% under list ("+fmt(full-t)+"/mo)"}</div></div>`;
   }).join("");
   const pts=[...new Set([1,2,3,10,25,50,75,100,n])].sort((a,b)=>a-b);
-  let h=`<tr><th>Locations</th>${TIERS.map(l=>`<th>${fmt(l)} rate</th><th>${fmt(l)} total</th>`).join("")}</tr>`;
-  h+=pts.map(p=>`<tr class="${p===n?"hl":""}"><td>${p}</td>${TIERS.map(l=>{
-    const t=total(l,p); return `<td>${fmt2(mode==="volume"?rateAt(l,p):t/p)}</td><td>${fmt(t)}</td>`;}).join("")}</tr>`).join("");
+  let h=`<tr><th>Locations</th>${TIERS.map(tr=>`<th>${tr.name}</th>`).join("")}</tr>`;
+  h+=pts.map(p=>`<tr class="${p===n?"hl":""}"><td>${p}</td>${TIERS.map(tr=>{
+    const t=total(tr,p); return `<td>${fmt2(mode==="volume"||tr.flat?rateAt(tr,p):t/p)}</td>`;}).join("")}</tr>`).join("");
   document.getElementById("ref").innerHTML=h;
   document.getElementById("modenote").textContent = mode==="volume"
     ? "A 10-location client pays the 10-location rate on all 10. Simplest to quote."
     : "Location 1 pays list, location 2 a bit less, and so on. Totals run higher than volume pricing; the rate column shows the blended average.";
 }
 document.getElementById("formula").innerHTML=
-  `Rate per location = list × ${R.toFixed(6)}<sup>(locations − 2)</sup>, which is <b>${STEP.toFixed(3)}% off</b> for each location from the third on, compounding. One or two locations pay list. It stops dropping at 100 locations, so 100+ stay at the floor rate (${fmt(rateAt(3000,100))}, ${fmt(rateAt(1500,100))}, ${fmt2(rateAt(500,100))}).`;
+  `Rate per location = list × ${R.toFixed(6)}<sup>(locations − 2)</sup>, which is <b>${STEP.toFixed(3)}% off</b> for each location from the third on, compounding. One or two locations pay list. It stops dropping at 100 locations, so 100+ stay at the floor rate. The $1 Report plan never discounts, and Free stays free.`;
 const num=document.getElementById("n"), sl=document.getElementById("slider");
 num.addEventListener("input",()=>{sl.value=num.value;render();});
 sl.addEventListener("input",()=>{num.value=sl.value;render();});
