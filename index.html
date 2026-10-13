@@ -61,7 +61,7 @@ tr.hl td{color:var(--blue);font-weight:600}
 
   <div class="control">
     <label for="n">Locations</label>
-    <div class="count"><input id="n" type="number" min="1" max="150" value="1" inputmode="numeric" aria-label="Number of locations"></div>
+    <div class="count"><input id="n" type="number" min="1" max="150" value="1" inputmode="numeric" aria-label="Number of locations"><span id="plus" hidden>+</span></div>
     <input id="slider" type="range" min="1" max="150" value="1" aria-label="Locations slider">
   </div>
 
@@ -100,7 +100,12 @@ function total(t,n){
 }
 function render(){
   const n=Math.max(1,Math.min(150,parseInt(document.getElementById("n").value)||1));
+  document.getElementById("plus").hidden=n<150;
   document.getElementById("tiers").innerHTML=TIERS.map(tr=>{
+    if(n>=150&&!tr.flat) return `<div class="tier${tr.pop?" pop":""}"><h2>${tr.name} <span>${fmt(tr.list)}/mo list</span></h2>
+      <div class="rate">Custom</div>
+      <div class="total"><b>Enterprise pricing</b></div>
+      <div class="save">Talk to sales for 150+ locations</div></div>`;
     const list=tr.list, t=total(tr,n), eff=t/n, full=list*n;
     const pct=full?((1-t/full)*100):0;
     return `<div class="tier${tr.pop?" pop":""}"><h2>${tr.name} <span>${fmt(list)}/mo list</span></h2>
@@ -108,17 +113,18 @@ function render(){
       <div class="total"><b>${fmt(t)}</b>/mo total</div>
       <div class="save">${tr.flat?"No volume discount":pct.toFixed(1)+"% under list ("+fmt(full-t)+"/mo)"}</div></div>`;
   }).join("");
-  const pts=[...new Set([1,2,3,10,25,50,75,100,n])].sort((a,b)=>a-b);
+  const pts=[...new Set([1,2,3,10,25,50,75,100,n].filter(p=>p<150))].sort((a,b)=>a-b);
   let h=`<tr><th>Locations</th>${TIERS.map(tr=>`<th>${tr.name}</th>`).join("")}</tr>`;
   h+=pts.map(p=>`<tr class="${p===n?"hl":""}"><td>${p}</td>${TIERS.map(tr=>{
     const t=total(tr,p); return `<td>${fmt2(mode==="volume"||tr.flat?rateAt(tr,p):t/p)}</td>`;}).join("")}</tr>`).join("");
+  h+=`<tr class="${n>=150?"hl":""}"><td>150+</td>${TIERS.map(tr=>`<td>${tr.flat?fmt2(tr.list):"Custom"}</td>`).join("")}</tr>`;
   document.getElementById("ref").innerHTML=h;
   document.getElementById("modenote").textContent = mode==="volume"
     ? "A 10-location client pays the 10-location rate on all 10. Simplest to quote."
     : "Location 1 pays list, location 2 a bit less, and so on. Totals run higher than volume pricing; the rate column shows the blended average.";
 }
 document.getElementById("formula").innerHTML=
-  `Rate per location = list × ${R.toFixed(6)}<sup>(locations − 2)</sup>, which is <b>${STEP.toFixed(3)}% off</b> for each location from the third on, compounding. One or two locations pay list. It stops dropping at 100 locations, so 100+ stay at the floor rate. The $1 Report plan never discounts, and Free stays free.`;
+  `Rate per location = list × ${R.toFixed(6)}<sup>(locations − 2)</sup>, which is <b>${STEP.toFixed(3)}% off</b> for each location from the third on, compounding. One or two locations pay list. It stops dropping at 100 locations, so 100+ stay at the floor rate. At 150+ locations, paid plans move to custom enterprise pricing. The $1 Report plan never discounts, and Free stays free.`;
 const num=document.getElementById("n"), sl=document.getElementById("slider");
 num.addEventListener("input",()=>{sl.value=num.value;render();});
 sl.addEventListener("input",()=>{num.value=sl.value;render();});
